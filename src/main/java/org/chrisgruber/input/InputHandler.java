@@ -1,4 +1,4 @@
-package org.chrisgruber;
+package org.chrisgruber.input;
 
 import static org.lwjgl.glfw.GLFW.*;
 

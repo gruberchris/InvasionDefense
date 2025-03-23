@@ -1,5 +1,11 @@
 package org.chrisgruber;
 
+import org.chrisgruber.entity.EnemyShip;
+import org.chrisgruber.entity.Entity;
+import org.chrisgruber.entity.Projectile;
+import org.chrisgruber.entity.Tower;
+import org.chrisgruber.input.InputHandler;
+import org.chrisgruber.world.IslandGenerator;
 import org.lwjgl.Version;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
@@ -7,6 +13,10 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 
 import java.nio.IntBuffer;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Random;
 
 import static org.lwjgl.glfw.Callbacks.glfwFreeCallbacks;
 import static org.lwjgl.glfw.GLFW.*;
@@ -20,6 +30,16 @@ public class Game {
     private final int HEIGHT = 768;
     private final String TITLE = "Invasion Defense";
 
+    // Game world properties
+    private final int GRID_SIZE = 100;
+    private IslandGenerator islandGenerator;
+
+    // Game entities
+    private List<Entity> entities = new ArrayList<>();
+    private Random random = new Random();
+    private float spawnTimer = 0;
+    private final float SPAWN_INTERVAL = 10.0f; // Spawn enemy every 5 seconds
+
     // The window handle
     private long window;
 
@@ -30,6 +50,10 @@ public class Game {
 
     // Input handler
     private InputHandler inputHandler;
+
+    // Temporary list for new entities during update
+    private List<Entity> entitiesToAdd = new ArrayList<>();
+    private boolean isUpdating = false;
 
     public void run() {
         System.out.println("LWJGL Version: " + Version.getVersion());
@@ -73,6 +97,22 @@ public class Game {
             }
         });
 
+        // Setup mouse click callback
+        glfwSetMouseButtonCallback(window, (window, button, action, mods) -> {
+            if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+                double[] xpos = new double[1];
+                double[] ypos = new double[1];
+                glfwGetCursorPos(window, xpos, ypos);
+
+                // Convert screen coordinates to world coordinates (-1 to 1)
+                float worldX = (float)(xpos[0] / WIDTH) * 2 - 1;
+                float worldY = (float)(1 - ypos[0] / HEIGHT) * 2 - 1;
+
+                // Place a tower at click position
+                placeTower(worldX, worldY);
+            }
+        });
+
         inputHandler = new InputHandler(window);
 
         // Get the thread stack and push a new frame
@@ -102,6 +142,14 @@ public class Game {
 
         // Make the window visible
         glfwShowWindow(window);
+
+        // Initialize game world
+        islandGenerator = new IslandGenerator(GRID_SIZE, GRID_SIZE);
+        islandGenerator.generateIsland();
+
+        // Add initial towers
+        Tower initialTower = new Tower(0, 0, this);
+        entities.add(initialTower);
     }
 
     private void loop() {
@@ -110,7 +158,7 @@ public class Game {
         GL.createCapabilities();
 
         // Set the clear color
-        glClearColor(0.0f, 0.0f, 0.2f, 0.0f);
+        glClearColor(0.0f, 0.2f, 0.4f, 0.0f); // Dark blue for water
 
         running = true;
         lastFrameTime = (float)glfwGetTime();
@@ -138,56 +186,172 @@ public class Game {
     }
 
     private void update(float deltaTime) {
-        // Update game logic here
-
         // Update input state
         inputHandler.update();
 
-        // Now you can use the input state to move your player
-        if (inputHandler.isMoveLeft()) {
-            // Move player left
-            System.out.println("Moving left");
+        // Update spawn timer
+        spawnTimer += deltaTime;
+        if (spawnTimer >= SPAWN_INTERVAL) {
+            spawnEnemy();
+            spawnTimer = 0;
         }
 
-        if (inputHandler.isMoveRight()) {
-            // Move player right
-            System.out.println("Moving right");
+        // Mark that we're updating
+        isUpdating = true;
+        entitiesToAdd.clear();
+
+        // Update all entities
+        Iterator<Entity> iterator = entities.iterator();
+        while (iterator.hasNext()) {
+            Entity entity = iterator.next();
+            entity.update(deltaTime);
+
+            // Remove inactive entities
+            if (!entity.isActive()) {
+                iterator.remove();
+            }
         }
 
-        if (inputHandler.isMoveUp()) {
-            // Move player up
-            System.out.println("Moving up");
-        }
+        // No longer updating, add any new entities
+        isUpdating = false;
+        entities.addAll(entitiesToAdd);
+        entitiesToAdd.clear();
 
-        if (inputHandler.isMoveDown()) {
-            // Move player down
-            System.out.println("Moving down");
-        }
-
-        if (inputHandler.isShooting()) {
-            // Player is shooting
-            System.out.println("Shooting");
-        }
+        // Check for collisions
+        checkCollisions();
     }
 
     private void render() {
         // Clear the framebuffer
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Render game objects here
-        renderTriangleExample();
+        // Render island
+        renderIsland();
+
+        // Render all entities
+        for (Entity entity : entities) {
+            entity.render();
+        }
     }
 
-    private void renderTriangleExample() {
-        // Render a simple triangle
-        glBegin(GL_TRIANGLES);
-        glColor3f(1.0f, 0.0f, 0.0f);
-        glVertex2f(-0.5f, -0.5f);
-        glColor3f(0.0f, 1.0f, 0.0f);
-        glVertex2f(0.5f, -0.5f);
-        glColor3f(0.0f, 0.0f, 1.0f);
-        glVertex2f(0.0f, 0.5f);
+    private void renderIsland() {
+        // Scale to fit the grid in the OpenGL coordinate system (-1 to 1)
+        float scale = 1.8f / GRID_SIZE;
+
+        // Render the island map
+        glBegin(GL_QUADS);
+        for (int x = 0; x < GRID_SIZE; x++) {
+            for (int y = 0; y < GRID_SIZE; y++) {
+                float worldX = (x - GRID_SIZE/2) * scale;
+                float worldY = (y - GRID_SIZE/2) * scale;
+
+                if (islandGenerator.isLand(x, y)) {
+                    // Land color (green)
+                    glColor3f(0.2f, 0.6f, 0.2f);
+                    glVertex2f(worldX, worldY);
+                    glVertex2f(worldX + scale, worldY);
+                    glVertex2f(worldX + scale, worldY + scale);
+                    glVertex2f(worldX, worldY + scale);
+                }
+            }
+        }
         glEnd();
+    }
+
+    private void placeTower(float x, float y) {
+        // Check if position is on land (approximate conversion)
+        int gridX = (int)((x + 1) / 1.8f * GRID_SIZE + GRID_SIZE/2);
+        int gridY = (int)((y + 1) / 1.8f * GRID_SIZE + GRID_SIZE/2);
+
+        if (gridX >= 0 && gridX < GRID_SIZE && gridY >= 0 && gridY < GRID_SIZE) {
+            if (islandGenerator.isLand(gridX, gridY)) {
+                Tower tower = new Tower(x, y, this);
+                entities.add(tower);
+                System.out.println("Tower placed at: " + x + ", " + y);
+            } else {
+                System.out.println("Cannot place tower on water!");
+            }
+        }
+    }
+
+    private void spawnEnemy() {
+        // Spawn at random position at the edge of the screen
+        float x, y;
+        if (random.nextBoolean()) {
+            // Spawn on left or right edge
+            x = random.nextBoolean() ? -0.9f : 0.9f;
+            y = random.nextFloat() * 1.8f - 0.9f;
+        } else {
+            // Spawn on top or bottom edge
+            x = random.nextFloat() * 1.8f - 0.9f;
+            y = random.nextBoolean() ? -0.9f : 0.9f;
+        }
+
+        EnemyShip ship = new EnemyShip(x, y);
+
+        // Target the center of the island
+        ship.setTargetPosition(0, 0);
+
+        entities.add(ship);
+        System.out.println("Enemy ship spawned at: " + x + ", " + y);
+    }
+
+    public List<Entity> getEntities() {
+        return entities;
+    }
+
+    public void addEntity(Entity entity) {
+        if (isUpdating) {
+            entitiesToAdd.add(entity);
+        } else {
+            entities.add(entity);
+        }
+    }
+
+    private void checkCollisions() {
+        for (Entity entity1 : entities) {
+            // Skip if the entity is not active
+            if (!entity1.isActive()) continue;
+
+            // If entity1 is a projectile
+            if (entity1 instanceof Projectile) {
+                Projectile projectile = (Projectile) entity1;
+
+                for (Entity entity2 : entities) {
+                    // Skip if the same entity or entity2 is not active
+                    if (entity1 == entity2 || !entity2.isActive()) continue;
+
+                    // Check if projectile hit appropriate target
+                    if (projectile.isFriendly() && entity2 instanceof EnemyShip) {
+                        if (checkCollision(projectile, entity2)) {
+                            // Apply damage to enemy
+                            ((EnemyShip) entity2).takeDamage(projectile.getDamage());
+                            // Deactivate projectile
+                            projectile.setActive(false);
+                        }
+                    }
+                    // Could add enemy projectiles hitting player units here
+                }
+            }
+        }
+    }
+
+    private boolean checkCollision(Entity a, Entity b) {
+        float ax = a.getX();
+        float ay = a.getY();
+        float aw = a.getWidth();
+        float ah = a.getHeight();
+
+        float bx = b.getX();
+        float by = b.getY();
+        float bw = b.getWidth();
+        float bh = b.getHeight();
+
+        // Simple axis-aligned bounding box collision
+        return (ax - aw/2 < bx + bw/2 &&
+                ax + aw/2 > bx - bw/2 &&
+                ay - ah/2 < by + bh/2 &&
+                ay + ah/2 > by - bh/2);
     }
 
     public static void main(String[] args) {
