@@ -8,7 +8,7 @@ public class IslandGenerator {
     private final Random random;
 
     // 0 = water, 1 = land
-    private int[][] islandMap;
+    private final int[][] islandMap;
 
     public IslandGenerator(int width, int height) {
         this.width = width;

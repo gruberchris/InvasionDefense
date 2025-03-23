@@ -7,11 +7,11 @@ import java.util.List;
 import static org.lwjgl.opengl.GL11.*;
 
 public class Tower extends Entity {
-    private float attackRange;
-    private float attackDamage;
-    private float attackCooldown;
+    private final float attackRange;
+    private final float attackDamage;
+    private final float attackCooldown;
     private float currentCooldown = 0f;
-    private Game game; // Reference to the game for accessing entities and creating projectiles
+    private final Game game; // Reference to the game for accessing entities and creating projectiles
 
     public Tower(float x, float y, Game game) {
         super(x, y, 0.1f, 0.1f);

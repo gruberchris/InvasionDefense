@@ -3,10 +3,11 @@ package org.chrisgruber.entity;
 import static org.lwjgl.opengl.GL11.*;
 
 public class Projectile extends Entity {
-    private float targetX, targetY;
-    private float damage;
-    private float speed;
-    private boolean friendly; // True if shot by player, false if shot by enemy
+    private final float targetX;
+    private final float targetY;
+    private final float damage;
+    private final float speed;
+    private final boolean friendly; // True if shot by player, false if shot by enemy
     private float lifetime = 4.0f; // Maximum lifetime in seconds to prevent stray projectiles
 
     public Projectile(float startX, float startY, float targetX, float targetY, float damage, float size, float speed, boolean friendly) {

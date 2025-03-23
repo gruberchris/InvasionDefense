@@ -4,8 +4,8 @@ import static org.lwjgl.opengl.GL11.*;
 
 public class EnemyShip extends Entity {
     private float health;
-    private float speed;
-    private float[] targetPosition;
+    private final float speed;
+    private final float[] targetPosition;
 
     public EnemyShip(float x, float y) {
         super(x, y, 0.15f, 0.15f);

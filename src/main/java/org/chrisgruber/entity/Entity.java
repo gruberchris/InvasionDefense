@@ -8,7 +8,7 @@ public abstract class Entity {
     protected float width, height;
     protected boolean active = true;
 
-    public Entity(float x, float y, float width, float height) {
+    protected Entity(float x, float y, float width, float height) {
         this.id = UUID.randomUUID();
         this.x = x;
         this.y = y;
